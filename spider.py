@@ -14,22 +14,26 @@ class ThreadPool():
         '''
         self.N_thread = N_thread
         self.L_thread = list()
-        self.running = False
+        self._running = False
 
-    def creat(self,func,args):
+    def creat(self,func,args=()):
         for i in range(self.N_thread):
             self.L_thread.append(threading.Thread(target = func,args = args))
 
     def start(self):
         for thread in self.L_thread:
             thread.start()
-        self.running = True
+        self._running = True
 
     def wait(self):
         for thread in self.L_thread:
             if thread.isAlive():
                 thread.join()
-        self.running = False
+        self._running = False
+
+    @property
+    def running(self):
+        return self._running
 
     def run(self):
         '''
@@ -45,4 +49,3 @@ class Spider():
     '''
     pass
 
-    

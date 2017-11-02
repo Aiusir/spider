@@ -1,5 +1,6 @@
 import threading
 import queue
+import requests
 
 
 class ThreadPool():
@@ -16,9 +17,9 @@ class ThreadPool():
         self.L_thread = list()
         self._running = False
 
-    def creat(self,func,args=()):
+    def create(self,func,args=(),kwargs={}):
         for i in range(self.N_thread):
-            self.L_thread.append(threading.Thread(target = func,args = args))
+            self.L_thread.append(threading.Thread(target = func,args = args,kwargs=kwargs))
 
     def start(self):
         for thread in self.L_thread:
@@ -45,7 +46,158 @@ class ThreadPool():
 
 class Spider():
     '''
-    多线程爬虫
+    多线程爬虫,支持requests参数
     '''
-    pass
+    __version__ = '0.0.1'
+
+    def __init__(self,method,url,presphook,reqthdnum=2,prespthdnum=2,immd=True,**kwargs):
+        '''
+        method :请求方法
+        url: 待请求的url，可以为列表
+        presphook:处理响应的钩子函数
+        reqthdnum:请求进程数
+        prespthdnum:响应处理进程数
+        immd：是否收到响应后立即处理
+        kwargs:requests支持的其他参数
+        '''
+        self._method =method
+        self._Q_req = queue.Queue()
+        self._reg_url(url)
+        self._N_req_thd = reqthdnum
+        self._Q_resp = queue.Queue()
+        self._Q_resu = queue.Queue()
+        self._N_presp_thd = prespthdnum
+        self._H_presp = None
+        self._reg_presp_hook(presphook)
+        self._immd = immd
+        self._reqparam = kwargs
+        self.cookies = requests.cookies.cookiejar_from_dict({})
+        self.cookies = self._mergecookies(self._reqparam)
+        self._T_req = ThreadPool(self._N_req_thd)
+        self._T_presp = ThreadPool(self._N_presp_thd)
+
+    def __repr__(self):
+        return '<Spider [%s]>'% self.__version__
+
+    def _reg_url(self,url):
+        if isinstance(url,str):
+            self._Q_req.put(url)
+        elif isinstance(url,list):
+            for u in url:
+                self._Q_req.put(u)
+        else:
+            raise Exception('url type error! should be str or list!')
+
+    def _mergecookies(self,kwargs):
+        '''
+        将作为参数传入的cookies更新到对象cookies中
+        '''
+        usrcookies = kwargs.get('cookies')
+        if usrcookies:
+            self.cookies = requests.cookies.merge_cookies(self.cookies,usrcookies)
+            kwargs.pop('cookies')
+        return self.cookies
+
+    def _preparereq(self):
+        '''
+        创建请求进程池
+        '''
+        def request(method,cookies,**kwargs):
+            with requests.Session() as session:
+                while not self._Q_req.empty():
+                    url = self._Q_req.get()
+                    response = session.request(method,url,cookies=cookies,**kwargs)
+                    self._Q_resp.put(response)
+
+        self._T_req.create(request,args=(self._method,self.cookies,),kwargs=self._reqparam)
+
+    def _reg_presp_hook(self,hook):
+        '''
+        注册响应处理函数
+        该函数必须接受一个response作为入参
+        '''
+        if callable(hook):
+            self._H_presp = hook
+        else:
+            raise Exception('hook is not callable!')
+
+    def _preparepresp(self):
+        '''
+        创建响应处理进程池
+        '''
+        def hookadapter(hook):
+            while (not self._Q_resp.empty()) or (self._T_req.running):
+                try:
+                    response = self._Q_resp.get(block=False)
+                    result = hook(response)
+                    self._Q_resu.put(result)
+                except queue.Empty:
+                    pass
+
+        self._T_presp.create(hookadapter,args=(self._H_presp,))
+
+    def login(self,method,url,**kwargs):
+        '''
+        登陆函数，提取登陆后的cookies
+        参数与requests.request一致
+        '''
+        with requests.Session() as session:
+            response = session.request(method,url,**kwargs)
+            if response.ok:
+                self.cookies = requests.cookies.merge_cookies(self.cookies,session.cookies)
+            else:
+                raise Exception('login in error!')
+
+    def run(self):
+        '''
+        根据是否立即处理，采用不同调用方式
+        '''
+        self._preparereq()
+        self._preparepresp()
+        if self._immd:
+            self._T_req.start()
+            self._T_presp.start()
+            self._T_req.wait()
+            self._T_presp.wait()
+        else:
+            self._T_req.run()
+            self._T_presp.run()
+        return self.result
+
+    @property
+    def result(self):
+        '''
+        列表形式的处理结果
+        '''
+        result_list = list()
+        while not self._Q_resu.empty():
+            result_list.append(self._Q_resu.get())
+        return result_list
+
+
+if __name__ == '__main__':
+    def examplehook(response):
+        return response.ok
+    example_spider = Spider('get','http://www.example.com',examplehook,cookies = {'test':'test'},immd=False)
+    result = example_spider.run()
+    print(example_spider.cookies)
+    print(result)
+
+
+
+
+        
+
+
+
+
+
+
+        
+
+
+
+
+
+
 

@@ -15,7 +15,7 @@ class ThreadPool():
         '''
         self.N_thread = N_thread
         self.L_thread = list()
-        self._running = False
+        self._running = queue.Queue()
 
     def create(self,func,args=(),kwargs={}):
         for i in range(self.N_thread):
@@ -24,17 +24,17 @@ class ThreadPool():
     def start(self):
         for thread in self.L_thread:
             thread.start()
-        self._running = True
+        self._running.put("working")
 
     def wait(self):
         for thread in self.L_thread:
             if thread.isAlive():
                 thread.join()
-        self._running = False
+        self._running.get(block=False)
 
     @property
     def running(self):
-        return self._running
+        return not self._running.empty()
 
     def run(self):
         '''
@@ -178,7 +178,8 @@ class Spider():
 if __name__ == '__main__':
     def examplehook(response):
         return response.ok
-    example_spider = Spider('get','http://www.example.com',examplehook,cookies = {'test':'test'},immd=False)
+    url = ['http://www.example.com']*10
+    example_spider = Spider('get',url,examplehook,cookies = {'test':'test'},immd=False)
     result = example_spider.run()
     print(example_spider.cookies)
     print(result)

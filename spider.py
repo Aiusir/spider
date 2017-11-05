@@ -44,6 +44,20 @@ class ThreadPool():
         self.start()
         self.wait()
 
+class Rule():
+    '''
+    url与处理函数匹配规则,字典对象
+    re:正则表达式规则
+    callback:当规则匹配时的处理函数
+    '''
+    def __init__(self,re=None,callback=None):
+        if not isinstance(re,str):
+            raise Exception('re should be str')
+        if not callable(callback):
+            raise Exception('callback should callable')
+        self.rule = dict(re=re,callback=callaback)
+        
+
 class Spider():
     '''
     多线程爬虫,支持requests参数
@@ -174,6 +188,40 @@ class Spider():
             result_list.append(self._Q_resu.get())
         return result_list
 
+class CrwalSpider():
+    '''
+    模仿scrapy CrwalSpider造的轮子
+    '''
+    def __init__(self,rules=(),start_url='',parse=None):
+        '''
+        rules:Rule对象列表
+        start_url:起始url
+        parse：起始url的处理函数，接收一个response
+        '''
+        if isinstance(rules = rules):
+            self.rules = rules
+        if isinstance(start_url,str):
+            self.start_url = start_url
+        if callable(parse):
+            self.parse = parse
+        else:
+            raise Exception('parse should be callable!')
+        self.preparedrules = list()
+        self.result = queue.Queue()
+        
+    def _compile(self):
+        pass
+    
+    def _ismatch(self,url):
+        pass
+
+    def _usecallback(self):
+        '''
+        调用spider处理
+        '''
+        pass
+        
+                
 
 if __name__ == '__main__':
     def examplehook(response):
